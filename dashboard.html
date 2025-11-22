@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Professional Expense Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <!-- Brand Logo & Name -->
+            <div class="navbar-brand">
+                <div class="brand-logo">💰</div>
+                <div class="brand-text">ExpenseManager</div>
+            </div>
+    
+            <!-- Simple Logout Button - Desktop -->
+            <div class="navbar-actions">
+                <button id="logoutBtn" class="navbar-btn btn-logout">
+                    <span>🚪</span>
+                    Logout
+                </button>
+            </div>
+    
+            <!-- Mobile Menu Button -->
+            <button class="mobile-menu-btn" id="mobileMenuBtn">
+                <span class="menu-line"></span>
+                <span class="menu-line"></span>
+                <span class="menu-line"></span>
+            </button>
+        </div>
+    
+        <!-- Simple Mobile Menu -->
+        <div class="mobile-menu" id="mobileMenu">
+            <div class="mobile-buttons">
+                <button id="mobileLogoutBtn" class="mobile-btn mobile-btn-logout">
+                    <span>🚪</span>
+                    Logout
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Dashboard Stats -->
+        <div class="dashboard">
+            <div class="stats-card">
+                <div class="stats-icon">💰</div>
+                <div class="stats-info">
+                    <h3>Total Expenses</h3>
+                    <p id="totalExpenses">Rs 0</p>
+                </div>
+            </div>
+            <div class="stats-card">
+                <div class="stats-icon">📅</div>
+                <div class="stats-info">
+                    <h3>This Month</h3>
+                    <p id="monthlyExpenses">Rs 0</p>
+                </div>
+            </div>
+            <div class="stats-card">
+                <div class="stats-icon">📊</div>
+                <div class="stats-info">
+                    <h3>Categories</h3>
+                    <p id="categoryCount">0</p>
+                </div>
+            </div>
+            <div class="stats-card">
+                <div class="stats-icon">📈</div>
+                <div class="stats-info">
+                    <h3>Avg. Monthly</h3>
+                    <p id="avgMonthly">Rs 0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="main-grid">
+            <!-- Left Column - Add Expense & Quick Stats -->
+            <div class="left-column">
+                <!-- Add Expense Card -->
+                <div class="card add-expense-card">
+                    <div class="card-header">
+                        <h2>➕ Add New Expense</h2>
+                        <div class="form-tips">
+                            <span class="tip">* Required fields</span>
+                        </div>
+                    </div>
+                    <form id="expenseForm" class="expense-form">
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="expenseTitle">Title <span class="required">*</span></label>
+                                <input type="text" id="expenseTitle" placeholder="Dinner, Groceries, etc." class="input-field" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="expenseAmount">Amount (Rs) <span class="required">*</span></label>
+                                <input type="number" id="expenseAmount" placeholder="0.00" class="input-field" min="1" step="0.01" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="input-group">
+                                <label for="expenseCategory">Category <span class="required">*</span></label>
+                                <select id="expenseCategory" class="input-field" required>
+                                    <option value="">Select Category</option>
+                                    <option value="food">🍕 Food & Dining</option>
+                                    <option value="transport">🚗 Transport</option>
+                                    <option value="shopping">🛍️ Shopping</option>
+                                    <option value="entertainment">🎬 Entertainment</option>
+                                    <option value="bills">📄 Bills & Utilities</option>
+                                    <option value="health">🏥 Health & Medical</option>
+                                    <option value="education">📚 Education</option>
+                                    <option value="travel">✈️ Travel</option>
+                                    <option value="other">🔷 Other</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="expenseDate">Date <span class="required">*</span></label>
+                                <input type="date" id="expenseDate" class="input-field" required>
+                            </div>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="expenseDescription">Description <span class="optional">(optional)</span></label>
+                            <textarea id="expenseDescription" placeholder="Additional details about this expense..." class="input-field textarea-field" rows="3"></textarea>
+                        </div>
+                        
+                        <button type="submit" id="addExpenseBtn" class="btn-primary full-width">
+                            <span id="addExpenseText">💾 Add Expense</span>
+                            <div id="addExpenseSpinner" class="spinner-small hidden"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Quick Stats Card -->
+                <div class="card quick-stats-card">
+                    <div class="card-header">
+                        <h2>📈 Quick Stats</h2>
+                        <span class="refresh-badge" onclick="updateDashboard()" title="Refresh Stats">🔄</span>
+                    </div>
+                    <div id="quickStats" class="quick-stats">
+                        <div class="quick-stat-item">
+                            <span class="stat-label">Today's Spending</span>
+                            <span class="stat-value">Rs0</span>
+                        </div>
+                        <div class="quick-stat-item">
+                            <span class="stat-label">This Week</span>
+                            <span class="stat-value">Rs0</span>
+                        </div>
+                        <div class="quick-stat-item">
+                            <span class="stat-label">Most Used Category</span>
+                            <span class="stat-value">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Expenses List -->
+            <div class="right-column">
+                <!-- Filters Card -->
+                <div class="card filters-card">
+                    <div class="card-header">
+                        <h2>🔍 Filter Expenses</h2>
+                        <span id="totalExpensesCount" class="count-badge">0 total</span>
+                    </div>
+                    <div class="filters-grid">
+                        <div class="input-group">
+                            <label for="searchInput">Search by Title</label>
+                            <input type="text" id="searchInput" placeholder="Type to search..." class="input-field">
+                        </div>
+                        <div class="input-group">
+                            <label for="categoryFilter">Category</label>
+                            <select id="categoryFilter" class="input-field">
+                                <option value="">All Categories</option>
+                                <option value="food">🍕 Food</option>
+                                <option value="transport">🚗 Transport</option>
+                                <option value="shopping">🛍️ Shopping</option>
+                                <option value="entertainment">🎬 Entertainment</option>
+                                <option value="bills">📄 Bills</option>
+                                <option value="health">🏥 Health</option>
+                                <option value="education">📚 Education</option>
+                                <option value="travel">✈️ Travel</option>
+                                <option value="other">🔷 Other</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="monthFilter">Month</label>
+                            <input type="month" id="monthFilter" class="input-field">
+                        </div>
+                        <div class="input-group">
+                            <label>&nbsp;</label>
+                            <button id="clearFilters" class="btn-secondary full-width">🗑️ Clear Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expenses List Card -->
+                <div class="card expenses-card">
+                    <div class="card-header">
+                        <h2>📋 Your Expenses</h2>
+                        <span id="expensesCount" class="count-badge">0 expenses</span>
+                    </div>
+                    <div class="expenses-controls">
+                        <div class="sort-controls">
+                            <label>Sort by:</label>
+                            <select id="sortBy" class="sort-select">
+                                <option value="date-desc">Date (Newest First)</option>
+                                <option value="date-asc">Date (Oldest First)</option>
+                                <option value="amount-desc">Amount (High to Low)</option>
+                                <option value="amount-asc">Amount (Low to High)</option>
+                                <option value="title-asc">Title (A-Z)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="expensesList" class="expenses-list">
+                        <div class="no-expenses text-center">
+                            <div style="font-size: 4rem; margin-bottom: 1rem; opacity: 0.5;">💸</div>
+                            <h3 style="color: var(--text-muted); margin-bottom: 0.5rem;">No expenses yet</h3>
+                            <p style="color: var(--text-light);">Add your first expense to get started!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Message Display -->
+    <div id="messageContainer" style="position: fixed; top: 80px; right: 20px; z-index: 1000; max-width: 300px;"></div>
+
+    <script src="firebase-config.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>
