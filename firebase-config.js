@@ -10,53 +10,72 @@ const firebaseConfig = {
 };
 
 // Global variables
-let auth, db;
+let auth = null;
+let db = null;
 
-try {
-    console.log("🚀 Initializing Firebase...");
-    
-    // Check if Firebase is available
-    if (typeof firebase === 'undefined') {
-        throw new Error("Firebase SDK not loaded. Check script tags.");
-    }
-    
-    // Check if Firebase app is already initialized
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-        console.log("✅ Firebase initialized successfully");
-    } else {
-        firebase.app(); // Use existing app
-        console.log("✅ Firebase already initialized");
-    }
-
-    // Initialize services with safety checks
-    if (typeof firebase.auth === 'function') {
-        auth = firebase.auth();
-        console.log("✅ Firebase Auth initialized");
-    } else {
-        throw new Error("Firebase Auth not available");
-    }
-
-    if (typeof firebase.firestore === 'function') {
-        db = firebase.firestore();
-        console.log("✅ Firestore initialized");
+function initializeFirebase() {
+    try {
+        console.log("🚀 Initializing Firebase...");
         
-        // Enable offline persistence (optional)
-        db.enablePersistence()
-            .then(() => console.log("✅ Offline persistence enabled"))
-            .catch(err => console.log("❌ Offline persistence error:", err));
-            
-    } else {
-        throw new Error("Firestore not available");
-    }
+        // Check if Firebase is available
+        if (typeof firebase === 'undefined') {
+            throw new Error("Firebase SDK not loaded. Check script tags.");
+        }
+        
+        console.log("📦 Firebase version:", firebase.SDK_VERSION);
+        console.log("🔧 Available services:", Object.keys(firebase));
+        
+        // Check if Firebase app is already initialized
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+            console.log("✅ Firebase App initialized successfully");
+        } else {
+            console.log("✅ Firebase App already initialized");
+        }
 
-} catch (error) {
-    console.error("❌ Firebase initialization error:", error);
-    showMessage('Firebase initialization failed. Please refresh the page.', 'error');
+        // Initialize Auth
+        if (typeof firebase.auth === 'function') {
+            auth = firebase.auth();
+            console.log("✅ Firebase Auth initialized");
+        } else {
+            console.error("❌ Firebase Auth not available");
+        }
+
+        // Initialize Firestore
+        if (typeof firebase.firestore === 'function') {
+            db = firebase.firestore();
+            console.log("✅ Firestore initialized");
+            
+            // Optional: Enable offline persistence
+            try {
+                db.enablePersistence()
+                    .then(() => console.log("✅ Offline persistence enabled"))
+                    .catch(err => console.log("⚠️ Offline persistence not supported:", err));
+            } catch (persistenceError) {
+                console.log("⚠️ Offline persistence error:", persistenceError);
+            }
+            
+        } else {
+            console.error("❌ Firestore not available - check if firebase-firestore.js is loaded");
+            // Try alternative initialization
+            if (typeof firebase.firestore === 'object') {
+                db = firebase.firestore();
+                console.log("✅ Firestore initialized (alternative method)");
+            }
+        }
+
+        // Setup auth state listener only if auth is available
+        if (auth) {
+            setupAuthListener();
+        }
+
+    } catch (error) {
+        console.error("❌ Firebase initialization error:", error);
+        showMessage('Firebase initialization failed. Please refresh the page.', 'error');
+    }
 }
 
-// Firebase Auth state observer
-if (auth) {
+function setupAuthListener() {
     auth.onAuthStateChanged((user) => {
         console.log("🔐 Auth state changed:", user ? user.email : "No user");
         
@@ -69,18 +88,33 @@ if (auth) {
                 currentPage === '/' || 
                 currentPage.endsWith('/')) {
                 console.log("🔄 Redirecting to dashboard...");
-                window.location.href = 'dashboard.html';
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 1000);
             }
         } else {
             // User is signed out
             if (currentPage.includes('dashboard.html')) {
                 console.log("🔄 Redirecting to login...");
-                window.location.href = 'index.html';
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1000);
             }
         }
     });
+}
+
+// Initialize Firebase when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("📄 DOM loaded, initializing Firebase...");
+    initializeFirebase();
+});
+
+// Also initialize if DOM is already loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeFirebase);
 } else {
-    console.error("❌ Auth service not available for state observer");
+    initializeFirebase();
 }
 
 // Utility functions
@@ -118,3 +152,4 @@ function showMessage(message, type = 'success', elementId = 'authMessage') {
 // Make services globally available
 window.auth = auth;
 window.db = db;
+window.firebaseConfig = firebaseConfig;
