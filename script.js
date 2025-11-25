@@ -1,16 +1,16 @@
-// DOM Elements
+
 const loginSection = document.getElementById('loginSection');
 const appSection = document.getElementById('appSection');
 const userEmail = document.getElementById('userEmail');
 
-// Auth Elements
+
 const emailInput = document.getElementById('email');
 const passwordInput = document.getElementById('password');
 const loginBtn = document.getElementById('loginBtn');
 const signupBtn = document.getElementById('signupBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 
-// Expense Form Elements
+
 const expenseTitle = document.getElementById('expenseTitle');
 const expenseAmount = document.getElementById('expenseAmount');
 const expenseCategory = document.getElementById('expenseCategory');
@@ -18,28 +18,27 @@ const expenseDate = document.getElementById('expenseDate');
 const expenseDescription = document.getElementById('expenseDescription');
 const addExpenseBtn = document.getElementById('addExpenseBtn');
 
-// Filter Elements
+
 const searchInput = document.getElementById('searchInput');
 const categoryFilter = document.getElementById('categoryFilter');
 const monthFilter = document.getElementById('monthFilter');
 const clearFilters = document.getElementById('clearFilters');
 
-// Stats Elements
+
 const totalExpenses = document.getElementById('totalExpenses');
 const monthlyExpenses = document.getElementById('monthlyExpenses');
 const categoryCount = document.getElementById('categoryCount');
 
-// Expenses List
+
 const expensesList = document.getElementById('expensesList');
 
-// Current User
 let currentUser = null;
 
-// Set current date as default
+
 expenseDate.value = new Date().toISOString().split('T')[0];
 monthFilter.value = new Date().toISOString().substring(0, 7);
 
-// Event Listeners
+
 loginBtn.addEventListener('click', handleLogin);
 signupBtn.addEventListener('click', handleSignup);
 logoutBtn.addEventListener('click', handleLogout);
@@ -49,7 +48,6 @@ categoryFilter.addEventListener('change', loadExpenses);
 monthFilter.addEventListener('change', loadExpenses);
 clearFilters.addEventListener('click', clearAllFilters);
 
-// Auth Functions
 async function handleLogin() {
     const email = emailInput.value;
     const password = passwordInput.value;
@@ -104,7 +102,6 @@ async function handleLogout() {
     }
 }
 
-// UI Functions
 function showLoginSection() {
     loginSection.classList.remove('hidden');
     appSection.classList.add('hidden');
@@ -121,7 +118,7 @@ function showAppSection(user) {
     updateDashboard();
 }
 
-// Expense Functions
+
 async function addExpense() {
     const title = expenseTitle.value.trim();
     const amount = parseFloat(expenseAmount.value);
@@ -154,7 +151,7 @@ async function addExpense() {
         
         await db.collection('expenses').add(expense);
         
-        // Clear form
+
         expenseTitle.value = '';
         expenseAmount.value = '';
         expenseCategory.value = '';
@@ -182,7 +179,7 @@ async function loadExpenses() {
             .where('userId', '==', currentUser.uid)
             .orderBy('date', 'desc');
         
-        // Apply filters
+
         const searchTerm = searchInput.value.trim().toLowerCase();
         const selectedCategory = categoryFilter.value;
         const selectedMonth = monthFilter.value;
@@ -196,7 +193,7 @@ async function loadExpenses() {
                 ...doc.data()
             };
             
-            // Client-side filtering
+
             let include = true;
             
             if (searchTerm && !expense.title.toLowerCase().includes(searchTerm)) {
@@ -286,7 +283,7 @@ async function deleteExpense(expenseId) {
     }
 }
 
-// Dashboard Functions
+
 async function updateDashboard() {
     if (!currentUser) return;
     
@@ -322,11 +319,10 @@ async function updateDashboard() {
 }
 
 function updateCharts(snapshot) {
-    // Simple chart implementation using CSS
+
     const categoryChart = document.getElementById('categoryChart');
     const monthlyChart = document.getElementById('monthlyChart');
-    
-    // Category distribution
+
     const categories = {};
     snapshot.forEach(doc => {
         const expense = doc.data();
@@ -345,7 +341,7 @@ function updateCharts(snapshot) {
             </div>
         `).join('') || '<p>No data available</p>';
     
-    // Monthly trend (simplified)
+
     const months = {};
     snapshot.forEach(doc => {
         const expense = doc.data();
@@ -354,7 +350,7 @@ function updateCharts(snapshot) {
     });
     
     monthlyChart.innerHTML = Object.entries(months)
-        .slice(-6) // Last 6 months
+        .slice(-6) 
         .map(([month, amount]) => `
             <div style="margin: 5px 0; text-align: center;">
                 <div style="font-size: 0.8rem;">${month}</div>
@@ -367,7 +363,7 @@ function updateCharts(snapshot) {
         `).join('') || '<p>No data available</p>';
 }
 
-// Utility Functions
+
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', {
@@ -384,9 +380,9 @@ function clearAllFilters() {
     loadExpenses();
 }
 
-// Initialize app
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if user is already logged in
+
     if (auth.currentUser) {
         showAppSection(auth.currentUser);
     }

@@ -1,957 +1,675 @@
-// Dashboard functionality with proper error handling
-let currentUser = null;
-let expenses = [];
-
-// Safe element getter with logging
-function getElement(id) {
-    const element = document.getElementById(id);
-    if (!element) {
-        console.error(`Element with id '${id}' not found`);
+class ExpenseManager {
+    constructor() {
+        this.currentUser = null;
+        this.expenses = [];
+        this.init();
     }
-    return element;
-}
 
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Content Loaded - Starting initialization');
-    
-    // Check authentication
-    auth.onAuthStateChanged((user) => {
-        console.log('Auth state changed:', user ? user.email : 'No user');
-        if (user) {
-            currentUser = user;
-            initializeDashboard(user);
-        } else {
-            console.log('No user found, redirecting to login');
-            window.location.href = 'index.html';
-        }
-    });
-});
-
-function initializeDashboard(user) {
-    console.log('Initializing dashboard for:', user.email);
-    
-    try {
-        // Set user email in navbar
-        const userEmailEl = getElement('userEmail');
-        if (userEmailEl) {
-            userEmailEl.textContent = user.email;
-        }
-
-        // Set up event listeners
-        setupEventListeners();
-        console.log('Event listeners setup completed');
-
-        // Set default date to today
-        const expenseDateEl = getElement('expenseDate');
-        const monthFilterEl = getElement('monthFilter');
+    init() {
+        console.log('🚀 Starting Expense Manager...');
         
-        if (expenseDateEl) {
-            expenseDateEl.value = new Date().toISOString().split('T')[0];
-        }
-        
-        if (monthFilterEl) {
-            monthFilterEl.value = new Date().toISOString().substring(0, 7);
-        }
-
-        // Load initial data
-        loadExpenses();
-        console.log('Dashboard initialization completed');
-        
-    } catch (error) {
-        console.error('ERROR in initializeDashboard:', error);
+        this.waitForFirebase().then(() => {
+            this.initializeAuth();
+        }).catch(error => {
+            console.error('❌ Firebase failed to load:', error);
+            this.showMessage('Firebase not available. Using demo mode.', 'error');
+            this.initializeWithDemoData();
+        });
     }
-}
 
-function setupEventListeners() {
-    console.log('Setting up event listeners...');
-    
-    try {
-        // Logout button
+    waitForFirebase() {
+        return new Promise((resolve, reject) => {
+            let attempts = 0;
+            const maxAttempts = 50; 
+            
+            const checkFirebase = () => {
+                attempts++;
+                
+                if (typeof auth !== 'undefined' && auth) {
+                    console.log('✅ Firebase auth loaded successfully');
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    reject(new Error('Firebase auth timeout - not loaded after ' + maxAttempts + ' attempts'));
+                } else {
+                    setTimeout(checkFirebase, 100);
+                }
+            };
+            
+            checkFirebase();
+        });
+    }
+
+    initializeAuth() {
+        console.log('🔐 Initializing authentication...');
+        
+
+        auth.onAuthStateChanged((user) => {
+            console.log('Auth state changed:', user ? user.email : 'No user');
+            if (user) {
+                this.currentUser = user;
+                this.initializeApp(user);
+            } else {
+                console.log('No user found, redirecting to login');
+
+                this.initializeWithDemoData();
+            }
+        });
+
+
+        this.setupEventListeners();
+    }
+
+    initializeWithDemoData() {
+        console.log('👤 Using demo mode - no Firebase');
+        this.currentUser = { uid: 'demo-user', email: 'demo@example.com' };
+        
+
+        this.updateUserInfo(this.currentUser);
+        this.setDefaultDates();
+        this.updateGreeting();
+        
+
+        this.loadDemoExpenses();
+        this.setupEventListeners();
+    }
+
+    loadDemoExpenses() {
+        console.log('📥 Loading demo expenses...');
+        
+
+        this.expenses = [
+            {
+                id: '1',
+                title: 'Groceries',
+                amount: 2500,
+                category: 'food',
+                date: new Date().toISOString().split('T')[0],
+                description: 'Weekly groceries'
+            },
+            {
+                id: '2', 
+                title: 'Petrol',
+                amount: 1500,
+                category: 'transport',
+                date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+                description: 'Car fuel'
+            },
+            {
+                id: '3',
+                title: 'Internet Bill',
+                amount: 2000,
+                category: 'bills',
+                date: new Date(Date.now() - 172800000).toISOString().split('T')[0]
+            }
+        ];
+        
+        this.displayExpenses(this.expenses);
+        this.updateDashboard();
+        this.showMessage('Demo mode activated - Add real Firebase config to save data', 'info');
+    }
+
+    initializeApp(user) {
+        console.log('👤 User logged in:', user.email);
+        
+        this.updateUserInfo(user);
+        this.setDefaultDates();
+        this.loadExpenses();
+        this.updateGreeting();
+    }
+
+    updateUserInfo(user) {
+        const userName = document.getElementById('userName');
+        const userEmail = document.getElementById('userEmail');
+        
+        if (userName) {
+            userName.textContent = user.displayName || user.email.split('@')[0] || 'User';
+        }
+        if (userEmail) {
+            userEmail.textContent = user.email;
+        }
+    }
+
+    setupEventListeners() {
+        console.log('🔧 Setting up event listeners...');
+        
+
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
-            logoutBtn.addEventListener('click', handleLogout);
-            console.log('Logout button listener added');
+            logoutBtn.addEventListener('click', () => this.handleLogout());
         }
 
-        // Expense form
         const expenseForm = document.getElementById('expenseForm');
         if (expenseForm) {
-            expenseForm.addEventListener('submit', function(e) {
+            expenseForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                console.log('Expense form submitted');
-                addExpense(e);
+                console.log('📝 Form submitted, calling addExpense...');
+                this.addExpense(e);
             });
-            console.log('Expense form submit listener added');
         }
+        
 
-        // Manual add expense button (backup)
-        const addExpenseBtn = document.getElementById('addExpenseBtn');
-        if (addExpenseBtn) {
-            addExpenseBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                console.log('Manual add expense button clicked');
-                addExpense(e);
-            });
-            console.log('Manual add expense button listener added');
-        }
-
-        // Filters
         const searchInput = document.getElementById('searchInput');
         const categoryFilter = document.getElementById('categoryFilter');
         const monthFilter = document.getElementById('monthFilter');
         const clearFilters = document.getElementById('clearFilters');
         
-        if (searchInput) {
-            searchInput.addEventListener('input', function() {
-                filterAndDisplayExpenses();
-            });
-            console.log('Search input listener added');
-        }
+        if (searchInput) searchInput.addEventListener('input', () => this.filterExpenses());
+        if (categoryFilter) categoryFilter.addEventListener('change', () => this.filterExpenses());
+        if (monthFilter) monthFilter.addEventListener('change', () => this.filterExpenses());
+        if (clearFilters) clearFilters.addEventListener('click', () => this.clearFilters());
         
-        if (categoryFilter) {
-            categoryFilter.addEventListener('change', function() {
-                filterAndDisplayExpenses();
-            });
-            console.log('Category filter listener added');
-        }
-        
-        if (monthFilter) {
-            monthFilter.addEventListener('change', function() {
-                filterAndDisplayExpenses();
-            });
-            console.log('Month filter listener added');
-        }
-        
-        if (clearFilters) {
-            clearFilters.addEventListener('click', clearAllFilters);
-            console.log('Clear filters listener added');
-        }
-        
-        // Sorting
-        const sortBy = document.getElementById('sortBy');
-        if (sortBy) {
-            sortBy.addEventListener('change', function() {
-                filterAndDisplayExpenses();
-            });
-            console.log('Sort selector listener added');
-        }
-        
-        console.log('All event listeners setup completed');
-        
-    } catch (error) {
-        console.error('ERROR in setupEventListeners:', error);
+        console.log('✅ Event listeners setup completed');
     }
-}
 
-async function handleLogout() {
-    try {
-        showLoading(true);
-        await auth.signOut();
-    } catch (error) {
-        showMessage('Logout failed: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
+    setDefaultDates() {
+        const today = new Date().toISOString().split('T')[0];
+        const currentMonth = new Date().toISOString().substring(0, 7);
+        
+        const expenseDate = document.getElementById('expenseDate');
+        const monthFilter = document.getElementById('monthFilter');
+        
+        if (expenseDate) expenseDate.value = today;
+        if (monthFilter) monthFilter.value = currentMonth;
     }
-}
 
-async function addExpense(e) {
-    console.log('addExpense function called');
-    
-    // Get form values
-    const title = getElement('expenseTitle')?.value.trim();
-    const amount = parseFloat(getElement('expenseAmount')?.value);
-    const category = getElement('expenseCategory')?.value;
-    const date = getElement('expenseDate')?.value;
-    const description = getElement('expenseDescription')?.value.trim();
-    
-    console.log('Form values:', { title, amount, category, date, description });
-    
-    // Validation
-    if (!title || !amount || !category || !date) {
-        showMessage('Please fill all required fields', 'error');
-        return;
-    }
-    
-    if (amount <= 0 || isNaN(amount)) {
-        showMessage('Amount must be greater than 0', 'error');
-        return;
-    }
-    
-    try {
-        // Show loading state - SAFE WAY
-        const addExpenseText = getElement('addExpenseText');
-        const addExpenseSpinner = getElement('addExpenseSpinner');
-        const addExpenseBtn = getElement('addExpenseBtn');
+    updateGreeting() {
+        const hour = new Date().getHours();
+        const greeting = document.getElementById('greetingText');
+        let message = 'Good Evening!';
         
-        if (addExpenseText) addExpenseText.textContent = 'Adding...';
-        if (addExpenseSpinner) addExpenseSpinner.classList.remove('hidden');
-        if (addExpenseBtn) addExpenseBtn.disabled = true;
+        if (hour < 12) message = 'Good Morning!';
+        else if (hour < 18) message = 'Good Afternoon!';
         
-        const expense = {
-            title: title,
-            amount: amount,
-            category: category,
-            date: date,
-            description: description,
-            userId: currentUser.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        
-        console.log("Adding expense to Firestore:", expense);
-        
-        // Add to Firestore
-        const docRef = await db.collection('expenses').add(expense);
-        console.log("Expense added with ID: ", docRef.id);
-        
-        // Clear form
-        if (getElement('expenseForm')) {
-            getElement('expenseForm').reset();
+        if (greeting) {
+            greeting.textContent = message;
         }
-        if (getElement('expenseDate')) {
-            getElement('expenseDate').value = new Date().toISOString().split('T')[0];
-        }
-        
-        showMessage('Expense added successfully!', 'success');
-        
-        // Reload expenses and update dashboard
-        await loadExpenses();
-        await updateDashboard();
-        
-    } catch (error) {
-        console.error('Error adding expense:', error);
-        showMessage('Error adding expense: ' + error.message, 'error');
-    } finally {
-        // Reset button state - SAFE WAY
-        const addExpenseText = getElement('addExpenseText');
-        const addExpenseSpinner = getElement('addExpenseSpinner');
-        const addExpenseBtn = getElement('addExpenseBtn');
-        
-        if (addExpenseText) addExpenseText.textContent = 'Add Expense';
-        if (addExpenseSpinner) addExpenseSpinner.classList.add('hidden');
-        if (addExpenseBtn) addExpenseBtn.disabled = false;
-        
-        console.log('addExpense function completed');
     }
-}
 
-async function loadExpenses() {
-    if (!currentUser) {
-        console.log('No current user, skipping loadExpenses');
-        return;
-    }
-    
-    try {
-        showLoading(true);
-        console.log('Loading expenses for user:', currentUser.uid);
+    async addExpense(e) {
+        console.log('💰 addExpense function called');
         
-        // SIMPLE QUERY - No sorting to avoid index issues
-        let query = db.collection('expenses')
-            .where('userId', '==', currentUser.uid);
+
+        const formData = this.getFormData();
+        console.log('📋 Form values:', formData);
         
-        const snapshot = await query.get();
-        expenses = [];
+
+        if (!this.validateForm(formData)) return;
         
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            const expense = {
-                id: doc.id,
-                ...data,
-                // Ensure date is properly formatted
-                date: data.date || data.createdAt?.toDate()?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
-            };
-            expenses.push(expense);
-        });
-        
-        // CLIENT-SIDE SORTING - This will always work
-        expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-        
-        console.log('Loaded expenses:', expenses.length);
-        
-        // Display expenses
-        displayExpenses(expenses);
-        updateExpensesCount(expenses.length);
-        updateDashboard();
-        
-    } catch (error) {
-        console.error('Error loading expenses:', error);
-        
-        // Special handling for index errors
-        if (error.message.includes('index')) {
-            console.error('Firestore index error. Please create the index or use client-side sorting.');
-            showMessage('Loading expenses with basic query...', 'info');
+        try {
+            this.showLoading(true);
             
-            // Fallback: Try without any filters
-            try {
+            const expenseData = {
+                ...formData,
+                userId: this.currentUser.uid,
+                createdAt: new Date(),
+                timestamp: new Date().getTime()
+            };
+            
+            console.log('💾 Saving expense:', expenseData);
+            
+            if (window.db && typeof db.collection === 'function') {
+
+                await db.collection('expenses').add(expenseData);
+                this.showMessage('Expense added successfully! 💰', 'success');
+            } else {
+
+                expenseData.id = 'demo-' + Date.now();
+                this.expenses.unshift(expenseData);
+                this.showMessage('Expense added (Demo Mode) 💰', 'success');
+            }
+            
+            this.resetExpenseForm();
+            
+
+            if (window.db && typeof db.collection === 'function') {
+                await this.loadExpenses();
+            } else {
+                this.displayExpenses(this.expenses);
+                this.updateDashboard();
+            }
+            
+        } catch (error) {
+            console.error('❌ Error adding expense:', error);
+            this.showMessage('Error adding expense: ' + error.message, 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    getFormData() {
+        return {
+            title: document.getElementById('expenseTitle')?.value.trim() || '',
+            amount: parseFloat(document.getElementById('expenseAmount')?.value) || 0,
+            category: document.getElementById('expenseCategory')?.value || '',
+            date: document.getElementById('expenseDate')?.value || '',
+            description: document.getElementById('expenseDescription')?.value.trim() || ''
+        };
+    }
+
+    validateForm(data) {
+        const { title, amount, category, date } = data;
+        
+        if (!title) {
+            this.showMessage('Please enter a title', 'error');
+            this.highlightInvalidField('expenseTitle');
+            return false;
+        }
+        
+        if (!amount || amount <= 0 || isNaN(amount)) {
+            this.showMessage('Please enter a valid amount greater than 0', 'error');
+            this.highlightInvalidField('expenseAmount');
+            return false;
+        }
+        
+        if (!category) {
+            this.showMessage('Please select a category', 'error');
+            this.highlightInvalidField('expenseCategory');
+            return false;
+        }
+        
+        if (!date) {
+            this.showMessage('Please select a date', 'error');
+            this.highlightInvalidField('expenseDate');
+            return false;
+        }
+        
+        return true;
+    }
+
+    highlightInvalidField(fieldId) {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.style.borderColor = 'var(--error)';
+            setTimeout(() => {
+                field.style.borderColor = '';
+            }, 3000);
+        }
+    }
+
+    resetExpenseForm() {
+        const form = document.getElementById('expenseForm');
+        if (form) {
+            form.reset();
+            this.setDefaultDates();
+        }
+    }
+
+    async loadExpenses() {
+        if (!this.currentUser) {
+            console.log('No current user');
+            return;
+        }
+        
+        try {
+            this.showLoading(true);
+            console.log('📥 Loading expenses...');
+            
+            if (window.db && typeof db.collection === 'function') {
                 const snapshot = await db.collection('expenses')
-                    .where('userId', '==', currentUser.uid)
+                    .where('userId', '==', this.currentUser.uid)
                     .get();
                 
-                expenses = [];
+                this.expenses = [];
                 snapshot.forEach(doc => {
-                    expenses.push({
+                    const data = doc.data();
+                    this.expenses.push({
                         id: doc.id,
-                        ...doc.data()
+                        ...data
                     });
                 });
-                
-                // Client-side sorting
-                expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-                
-                displayExpenses(expenses);
-                updateExpensesCount(expenses.length);
-                updateDashboard();
-                
-            } catch (fallbackError) {
-                showMessage('Error loading expenses. Please refresh the page.', 'error');
-            }
-        } else {
-            showMessage('Error loading expenses: ' + error.message, 'error');
-        }
-    } finally {
-        showLoading(false);
-    }
-}
 
-function displayExpenses(expensesArray) {
-    const expensesList = getElement('expensesList');
-    if (!expensesList) return;
-    
-    if (expensesArray.length === 0) {
-        expensesList.innerHTML = `
-            <div class="no-expenses text-center">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
-                <h3 style="color: var(--text-muted); margin-bottom: 0.5rem;">No expenses found</h3>
-                <p style="color: var(--text-light);">Add your first expense using the form above!</p>
-            </div>
-        `;
-        return;
+                this.expenses.sort((a, b) => {
+                    const dateA = new Date(a.createdAt?.toDate?.() || a.createdAt || a.date || 0);
+                    const dateB = new Date(b.createdAt?.toDate?.() || b.createdAt || b.date || 0);
+                    return dateB - dateA;
+                });
+            }
+
+            
+            console.log('✅ Loaded expenses:', this.expenses.length);
+            this.displayExpenses(this.expenses);
+            this.updateDashboard();
+            
+        } catch (error) {
+            console.error('❌ Error loading expenses:', error);
+            this.showMessage('Error loading expenses: ' + error.message, 'error');
+        } finally {
+            this.showLoading(false);
+        }
     }
-    
-    expensesList.innerHTML = expensesArray.map(expense => `
-        <div class="expense-item category-${expense.category}">
-            <div class="expense-main">
+
+    displayExpenses(expenses) {
+        const container = document.getElementById('expensesList');
+        if (!container) {
+            console.error('Expenses list container not found!');
+            return;
+        }
+        
+        if (expenses.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">
+                        <i class="fas fa-receipt"></i>
+                    </div>
+                    <h3>No expenses found</h3>
+                    <p>Add your first expense using the form!</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = expenses.map(expense => `
+            <div class="expense-item">
                 <div class="expense-icon">
-                    ${getCategoryIcon(expense.category)}
+                    <i class="fas ${this.getCategoryIcon(expense.category)}"></i>
                 </div>
                 <div class="expense-details">
-                    <div class="expense-title">${escapeHtml(expense.title)}</div>
+                    <div class="expense-title">${this.escapeHtml(expense.title)}</div>
                     <div class="expense-meta">
-                        <span class="expense-category">${expense.category.charAt(0).toUpperCase() + expense.category.slice(1)}</span>
-                        <span class="expense-date">${formatDate(expense.date)}</span>
-                        ${expense.description ? `<span class="expense-desc">• ${escapeHtml(expense.description)}</span>` : ''}
+                        <span class="expense-category">${this.formatCategory(expense.category)}</span>
+                        <span>${this.formatDate(expense.date)}</span>
+                        ${expense.description ? `<span>• ${this.escapeHtml(expense.description)}</span>` : ''}
                     </div>
                 </div>
+                <div class="expense-amount">Rs ${expense.amount.toFixed(2)}</div>
+                <div class="expense-actions">
+                    <button class="btn-icon btn-danger" onclick="expenseManager.deleteExpense('${expense.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
-            <div class="expense-amount">₹${expense.amount.toFixed(2)}</div>
-            <div class="expense-actions">
-                <button class="btn-danger" onclick="deleteExpense('${expense.id}')">Delete</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function filterAndDisplayExpenses() {
-    const searchTerm = getElement('searchInput')?.value.toLowerCase() || '';
-    const categoryFilter = getElement('categoryFilter')?.value || '';
-    const monthFilter = getElement('monthFilter')?.value || '';
-    const sortBy = getElement('sortBy')?.value || 'date-desc';
-    
-    let filteredExpenses = [...expenses];
-    
-    // Apply search filter
-    if (searchTerm) {
-        filteredExpenses = filteredExpenses.filter(expense => 
-            expense.title.toLowerCase().includes(searchTerm) ||
-            (expense.description && expense.description.toLowerCase().includes(searchTerm))
-        );
-    }
-    
-    // Apply category filter
-    if (categoryFilter) {
-        filteredExpenses = filteredExpenses.filter(expense => 
-            expense.category === categoryFilter
-        );
-    }
-    
-    // Apply month filter
-    if (monthFilter) {
-        filteredExpenses = filteredExpenses.filter(expense => 
-            expense.date.startsWith(monthFilter)
-        );
-    }
-    
-    // Apply sorting
-    switch (sortBy) {
-        case 'date-asc':
-            filteredExpenses.sort((a, b) => new Date(a.date) - new Date(b.date));
-            break;
-        case 'date-desc':
-            filteredExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
-            break;
-        case 'amount-asc':
-            filteredExpenses.sort((a, b) => a.amount - b.amount);
-            break;
-        case 'amount-desc':
-            filteredExpenses.sort((a, b) => b.amount - a.amount);
-            break;
-        case 'title-asc':
-            filteredExpenses.sort((a, b) => a.title.localeCompare(b.title));
-            break;
-        case 'title-desc':
-            filteredExpenses.sort((a, b) => b.title.localeCompare(a.title));
-            break;
-    }
-    
-    displayExpenses(filteredExpenses);
-    updateExpensesCount(filteredExpenses.length);
-}
-
-function updateExpensesCount(count) {
-    const countBadge = getElement('expensesCount');
-    if (countBadge) {
-        countBadge.textContent = `${count} expense${count !== 1 ? 's' : ''}`;
-    }
-}
-
-async function deleteExpense(expenseId) {
-    if (!confirm('Are you sure you want to delete this expense?')) {
-        return;
-    }
-    
-    try {
-        showLoading(true);
-        await db.collection('expenses').doc(expenseId).delete();
-        showMessage('Expense deleted successfully!', 'success');
-        await loadExpenses();
-        await updateDashboard();
-    } catch (error) {
-        console.error('Error deleting expense:', error);
-        showMessage('Error deleting expense: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
-}
-
-async function updateDashboard() {
-    if (!currentUser || expenses.length === 0) {
-        resetDashboard();
-        return;
-    }
-    
-    try {
-        let total = 0;
-        let monthlyTotal = 0;
-        const categories = new Set();
-        const currentMonth = new Date().toISOString().substring(0, 7);
-        const monthlyData = {};
+        `).join('');
         
-        expenses.forEach(expense => {
-            total += expense.amount;
-            categories.add(expense.category);
+        this.updateExpensesCount(expenses.length);
+    }
+
+    updateExpensesCount(count) {
+        const expensesCount = document.getElementById('expensesCount');
+        const totalExpensesCount = document.getElementById('totalExpensesCount');
+        
+        if (expensesCount) expensesCount.textContent = `${count} expenses`;
+        if (totalExpensesCount) totalExpensesCount.textContent = `${this.expenses.length} total`;
+    }
+
+    filterExpenses() {
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const monthFilter = document.getElementById('monthFilter');
+        
+        if (!searchInput || !categoryFilter || !monthFilter) return;
+        
+        const searchTerm = searchInput.value.toLowerCase();
+        const categoryValue = categoryFilter.value;
+        const monthValue = monthFilter.value;
+        
+        let filtered = this.expenses.filter(expense => {
+            const matchesSearch = !searchTerm || 
+                expense.title.toLowerCase().includes(searchTerm) ||
+                (expense.description && expense.description.toLowerCase().includes(searchTerm));
             
-            // Monthly total
-            if (expense.date.startsWith(currentMonth)) {
-                monthlyTotal += expense.amount;
-            }
+            const matchesCategory = !categoryValue || expense.category === categoryValue;
+            const matchesMonth = !monthValue || expense.date.startsWith(monthValue);
             
-            // Monthly data for average
-            const month = expense.date.substring(0, 7);
-            monthlyData[month] = (monthlyData[month] || 0) + expense.amount;
+            return matchesSearch && matchesCategory && matchesMonth;
         });
         
-        // Calculate average monthly
-        const monthlyValues = Object.values(monthlyData);
-        const avgMonthly = monthlyValues.length > 0 ? 
-            monthlyValues.reduce((a, b) => a + b, 0) / monthlyValues.length : 0;
-        
-        // Update DOM
-        const totalExpensesEl = getElement('totalExpenses');
-        const monthlyExpensesEl = getElement('monthlyExpenses');
-        const categoryCountEl = getElement('categoryCount');
-        const avgMonthlyEl = getElement('avgMonthly');
-        
-        if (totalExpensesEl) totalExpensesEl.textContent = `₹${total.toFixed(2)}`;
-        if (monthlyExpensesEl) monthlyExpensesEl.textContent = `₹${monthlyTotal.toFixed(2)}`;
-        if (categoryCountEl) categoryCountEl.textContent = categories.size;
-        if (avgMonthlyEl) avgMonthlyEl.textContent = `₹${avgMonthly.toFixed(2)}`;
-        
-        updateQuickStats();
-        updateCharts();
-        
-    } catch (error) {
-        console.error('Error updating dashboard:', error);
+        this.displayExpenses(filtered);
     }
-}
 
-function updateQuickStats() {
-    const quickStats = getElement('quickStats');
-    if (!quickStats) return;
-    
-    // Calculate quick stats
-    const today = new Date().toISOString().split('T')[0];
-    const todayExpenses = expenses.filter(e => e.date === today)
-                                 .reduce((sum, e) => sum + e.amount, 0);
-    
-    const categoryTotals = {};
-    expenses.forEach(expense => {
-        categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + expense.amount;
-    });
-    
-    const highestCategory = Object.keys(categoryTotals).reduce((a, b) => 
-        categoryTotals[a] > categoryTotals[b] ? a : b, 'None');
-    
-    quickStats.innerHTML = `
-        <div class="quick-stat-item">
-            <span class="stat-label">Today's Spending</span>
-            <span class="stat-value">₹${todayExpenses.toFixed(2)}</span>
-        </div>
-        <div class="quick-stat-item">
-            <span class="stat-label">Total Categories</span>
-            <span class="stat-value">${new Set(expenses.map(e => e.category)).size}</span>
-        </div>
-        <div class="quick-stat-item">
-            <span class="stat-label">Highest Category</span>
-            <span class="stat-value">${highestCategory.charAt(0).toUpperCase() + highestCategory.slice(1)}</span>
-        </div>
-    `;
-}
-
-function updateCharts() {
-    updateCategoryChart();
-    updateMonthlyChart();
-}
-
-function updateCategoryChart() {
-    const categoryChart = getElement('categoryChart');
-    if (!categoryChart) return;
-    
-    const categoryTotals = {};
-    expenses.forEach(expense => {
-        categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + expense.amount;
-    });
-    
-    const maxAmount = Math.max(...Object.values(categoryTotals));
-    
-    categoryChart.innerHTML = `
-        <div class="chart-bar">
-            ${Object.entries(categoryTotals).map(([category, amount]) => `
-                <div class="bar-container">
-                    <div class="bar" style="height: ${maxAmount ? (amount / maxAmount) * 100 : 0}%"></div>
-                    <div class="bar-label">${category.charAt(0).toUpperCase()}</div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-}
-
-function updateMonthlyChart() {
-    const monthlyChart = getElement('monthlyChart');
-    if (!monthlyChart) return;
-    
-    const monthlyTotals = {};
-    expenses.forEach(expense => {
-        const month = expense.date.substring(0, 7);
-        monthlyTotals[month] = (monthlyTotals[month] || 0) + expense.amount;
-    });
-    
-    // Get last 6 months
-    const months = [];
-    for (let i = 5; i >= 0; i--) {
-        const date = new Date();
-        date.setMonth(date.getMonth() - i);
-        months.push(date.toISOString().substring(0, 7));
+    clearFilters() {
+        const searchInput = document.getElementById('searchInput');
+        const categoryFilter = document.getElementById('categoryFilter');
+        const monthFilter = document.getElementById('monthFilter');
+        
+        if (searchInput) searchInput.value = '';
+        if (categoryFilter) categoryFilter.value = '';
+        if (monthFilter) monthFilter.value = new Date().toISOString().substring(0, 7);
+        
+        this.filterExpenses();
+        this.showMessage('Filters cleared', 'info');
     }
-    
-    const maxAmount = Math.max(...Object.values(monthlyTotals));
-    
-    monthlyChart.innerHTML = `
-        <div class="chart-bar">
-            ${months.map(month => {
-                const amount = monthlyTotals[month] || 0;
-                return `
-                    <div class="bar-container">
-                        <div class="bar" style="height: ${maxAmount ? (amount / maxAmount) * 100 : 0}%"></div>
-                        <div class="bar-label">${month.substring(5, 7)}/${month.substring(2, 4)}</div>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-    `;
-}
 
-function resetDashboard() {
-    const totalExpensesEl = getElement('totalExpenses');
-    const monthlyExpensesEl = getElement('monthlyExpenses');
-    const categoryCountEl = getElement('categoryCount');
-    const avgMonthlyEl = getElement('avgMonthly');
-    
-    if (totalExpensesEl) totalExpensesEl.textContent = '₹0';
-    if (monthlyExpensesEl) monthlyExpensesEl.textContent = '₹0';
-    if (categoryCountEl) categoryCountEl.textContent = '0';
-    if (avgMonthlyEl) avgMonthlyEl.textContent = '₹0';
-    
-    const quickStats = getElement('quickStats');
-    if (quickStats) {
+    async deleteExpense(expenseId) {
+        if (!confirm('Are you sure you want to delete this expense?')) return;
+        
+        try {
+            this.showLoading(true);
+            
+            if (window.db && typeof db.collection === 'function') {
+                await db.collection('expenses').doc(expenseId).delete();
+                this.showMessage('Expense deleted successfully 🗑️', 'success');
+                await this.loadExpenses();
+            } else {
+                this.expenses = this.expenses.filter(exp => exp.id !== expenseId);
+                this.showMessage('Expense deleted (Demo Mode) 🗑️', 'success');
+                this.displayExpenses(this.expenses);
+                this.updateDashboard();
+            }
+            
+        } catch (error) {
+            console.error('❌ Error deleting expense:', error);
+            this.showMessage('Error deleting expense', 'error');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    updateDashboard() {
+        if (this.expenses.length === 0) {
+            this.resetDashboard();
+            return;
+        }
+        
+        try {
+
+            const total = this.expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            
+            const currentMonth = new Date().toISOString().substring(0, 7);
+            const monthlyTotal = this.expenses
+                .filter(expense => expense.date && expense.date.startsWith(currentMonth))
+                .reduce((sum, expense) => sum + expense.amount, 0);
+            
+            const categories = new Set(this.expenses.map(expense => expense.category).filter(Boolean));
+            
+
+            const monthlyTotals = {};
+            this.expenses.forEach(expense => {
+                if (expense.date) {
+                    const month = expense.date.substring(0, 7);
+                    monthlyTotals[month] = (monthlyTotals[month] || 0) + expense.amount;
+                }
+            });
+            
+            const monthlyValues = Object.values(monthlyTotals);
+            const avgMonthly = monthlyValues.length > 0 ? 
+                monthlyValues.reduce((a, b) => a + b, 0) / monthlyValues.length : 0;
+            
+
+            this.updateElement('totalExpenses', `Rs ${total.toFixed(2)}`);
+            this.updateElement('monthlyExpenses', `Rs ${monthlyTotal.toFixed(2)}`);
+            this.updateElement('categoryCount', categories.size);
+            this.updateElement('avgMonthly', `Rs ${avgMonthly.toFixed(2)}`);
+            
+            this.updateQuickStats();
+            
+        } catch (error) {
+            console.error('Error updating dashboard:', error);
+        }
+    }
+
+    updateElement(id, value) {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    }
+
+    updateQuickStats() {
+        const quickStats = document.getElementById('quickStats');
+        if (!quickStats) return;
+        
+        const today = new Date().toISOString().split('T')[0];
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        const todayTotal = this.expenses
+            .filter(expense => expense.date === today)
+            .reduce((sum, expense) => sum + expense.amount, 0);
+        
+        const weekTotal = this.expenses
+            .filter(expense => expense.date >= oneWeekAgo)
+            .reduce((sum, expense) => sum + expense.amount, 0);
+        
+
+        const categoryCounts = {};
+        this.expenses.forEach(expense => {
+            if (expense.category) {
+                categoryCounts[expense.category] = (categoryCounts[expense.category] || 0) + 1;
+            }
+        });
+        
+        const topCategory = Object.keys(categoryCounts).length > 0 ? 
+            Object.keys(categoryCounts).reduce((a, b) => categoryCounts[a] > categoryCounts[b] ? a : b) : 'None';
+        
+
         quickStats.innerHTML = `
-            <div class="quick-stat-item">
-                <span class="stat-label">Today's Spending</span>
-                <span class="stat-value">₹0</span>
+            <div class="quick-stat">
+                <span class="stat-text">Today's Spending</span>
+                <span class="stat-number">Rs ${todayTotal.toFixed(2)}</span>
             </div>
-            <div class="quick-stat-item">
-                <span class="stat-label">Total Categories</span>
-                <span class="stat-value">0</span>
+            <div class="quick-stat">
+                <span class="stat-text">This Week</span>
+                <span class="stat-number">Rs ${weekTotal.toFixed(2)}</span>
             </div>
-            <div class="quick-stat-item">
-                <span class="stat-label">Highest Category</span>
-                <span class="stat-value">None</span>
+            <div class="quick-stat">
+                <span class="stat-text">Most Used Category</span>
+                <span class="stat-number">${this.formatCategory(topCategory)}</span>
             </div>
         `;
     }
-}
 
-function clearAllFilters() {
-    const searchInput = getElement('searchInput');
-    const categoryFilter = getElement('categoryFilter');
-    const monthFilter = getElement('monthFilter');
-    const sortBy = getElement('sortBy');
-    
-    if (searchInput) searchInput.value = '';
-    if (categoryFilter) categoryFilter.value = '';
-    if (monthFilter) monthFilter.value = new Date().toISOString().substring(0, 7);
-    if (sortBy) sortBy.value = 'date-desc';
-    
-    filterAndDisplayExpenses();
-}
-
-// Utility functions
-function getCategoryIcon(category) {
-    const icons = {
-        food: '🍕',
-        transport: '🚗',
-        shopping: '🛍️',
-        entertainment: '🎬',
-        bills: '📄',
-        health: '🏥',
-        education: '📚',
-        travel: '✈️',
-        other: '🔷'
-    };
-    return icons[category] || '🔷';
-}
-
-function formatDate(dateString) {
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        });
-    } catch (error) {
-        return 'Invalid Date';
-    }
-}
-
-function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-// Navbar functionality
-function setupNavbarInteractions() {
-    console.log("🔧 Setting up navbar interactions...");
-    
-    try {
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        const mobileMenu = document.getElementById('mobileMenu');
-        const logoutBtn = document.getElementById('logoutBtn');
-        const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
-
-        // Create overlay for mobile menu
-        const overlay = document.createElement('div');
-        overlay.className = 'mobile-overlay';
-        document.body.appendChild(overlay);
-
-        // Mobile menu toggle functionality
-        if (mobileMenuBtn && mobileMenu) {
-            mobileMenuBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMobileMenu();
-            });
-
-            // Close mobile menu when clicking on overlay
-            overlay.addEventListener('click', function() {
-                closeMobileMenu();
-            });
-
-            // Close mobile menu when clicking on logout button
-            if (mobileLogoutBtn) {
-                mobileLogoutBtn.addEventListener('click', function() {
-                    closeMobileMenu();
-                });
-            }
-
-            // Close mobile menu when pressing Escape key
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
-                    closeMobileMenu();
-                }
-            });
-
-            // Close mobile menu when window is resized to desktop
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768 && mobileMenu.classList.contains('active')) {
-                    closeMobileMenu();
-                }
-            });
-        }
-
-        // Logout functionality
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', handleLogout);
-            console.log("Desktop logout button setup");
-        }
+    resetDashboard() {
+        this.updateElement('totalExpenses', 'Rs 0');
+        this.updateElement('monthlyExpenses', 'Rs 0');
+        this.updateElement('categoryCount', '0');
+        this.updateElement('avgMonthly', 'Rs 0');
         
-        if (mobileLogoutBtn) {
-            mobileLogoutBtn.addEventListener('click', handleLogout);
-            console.log("Mobile logout button setup");
+        const quickStats = document.getElementById('quickStats');
+        if (quickStats) {
+            quickStats.innerHTML = `
+                <div class="quick-stat">
+                    <span class="stat-text">Today's Spending</span>
+                    <span class="stat-number">Rs 0</span>
+                </div>
+                <div class="quick-stat">
+                    <span class="stat-text">This Week</span>
+                    <span class="stat-number">Rs 0</span>
+                </div>
+                <div class="quick-stat">
+                    <span class="stat-text">Most Used Category</span>
+                    <span class="stat-number">-</span>
+                </div>
+            `;
         }
+    }
 
-        function toggleMobileMenu() {
-            const isActive = mobileMenu.classList.contains('active');
+    async handleLogout() {
+        try {
+            this.showLoading(true);
             
-            if (isActive) {
-                closeMobileMenu();
+            if (window.auth && typeof auth.signOut === 'function') {
+                await auth.signOut();
+                window.location.href = 'index.html';
             } else {
-                openMobileMenu();
+
+                this.showMessage('Logged out of demo mode', 'info');
+                this.initializeWithDemoData();
             }
+        } catch (error) {
+            console.error('❌ Error logging out:', error);
+            this.showMessage('Error logging out', 'error');
+        } finally {
+            this.showLoading(false);
         }
-
-        function openMobileMenu() {
-            mobileMenuBtn.classList.add('active');
-            mobileMenu.classList.add('active');
-            overlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-            console.log("Mobile menu opened");
-        }
-
-        function closeMobileMenu() {
-            mobileMenuBtn.classList.remove('active');
-            mobileMenu.classList.remove('active');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
-            console.log("Mobile menu closed");
-        }
-        
-    } catch (error) {
-        console.error('❌ ERROR in setupNavbarInteractions:', error);
     }
-}
 
-// Navbar scroll effect
-function setupNavbarScroll() {
-    const navbar = document.querySelector('.navbar');
-    
-    if (navbar) {
-        window.addEventListener('scroll', function() {
-            if (window.scrollY > 50) {
-                navbar.style.background = 'rgba(255, 255, 255, 0.98)';
-                navbar.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.15)';
-            } else {
-                navbar.style.background = 'rgba(255, 255, 255, 0.95)';
-                navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
-            }
-        });
+
+    getCategoryIcon(category) {
+        const icons = {
+            food: 'fa-utensils',
+            transport: 'fa-car',
+            shopping: 'fa-shopping-bag',
+            bills: 'fa-file-invoice',
+            entertainment: 'fa-film',
+            health: 'fa-heartbeat',
+            education: 'fa-graduation-cap',
+            other: 'fa-circle'
+        };
+        return icons[category] || 'fa-circle';
     }
-}
 
-// Navbar functionality
-function initializeNavbar(user) {
-    console.log('🔧 Initializing navbar for:', user.email);
-    
-    try {
-        // Set user email in both desktop and mobile
-        const userEmailEl = getElement('userEmail');
-        const mobileUserEmailEl = getElement('mobileUserEmail');
-        
-        if (userEmailEl) userEmailEl.textContent = user.email;
-        if (mobileUserEmailEl) mobileUserEmailEl.textContent = user.email;
-        
-        // Setup navbar interactions
-        setupNavbarInteractions();
-        
-        console.log('✅ Navbar initialization completed');
-        
-    } catch (error) {
-        console.error('❌ ERROR in initializeNavbar:', error);
+    formatCategory(category) {
+        if (!category || category === 'None') return 'Other';
+        const words = category.split(' ');
+        return words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     }
-}
 
-function setupNavbarInteractions() {
-    console.log("🔧 Setting up navbar interactions...");
-    
-    try {
-        const mobileMenuBtn = getElement('mobileMenuBtn');
-        const mobileMenu = getElement('mobileMenu');
-        const logoutBtn = getElement('logoutBtn');
-        const mobileLogoutBtn = getElement('mobileLogoutBtn');
-
-        // Create overlay for mobile menu if it doesn't exist
-        let overlay = document.querySelector('.mobile-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.className = 'mobile-overlay';
-            document.body.appendChild(overlay);
-        }
-
-        // Mobile menu toggle functionality
-        if (mobileMenuBtn && mobileMenu) {
-            console.log("📱 Mobile menu elements found");
-            
-            mobileMenuBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                console.log("📱 Mobile menu button clicked");
-                toggleMobileMenu();
+    formatDate(dateString) {
+        try {
+            if (!dateString) return 'Invalid Date';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-PK', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
             });
+        } catch (error) {
+            return 'Invalid Date';
+        }
+    }
 
-            // Close mobile menu when clicking on overlay
-            overlay.addEventListener('click', function() {
-                console.log("📱 Overlay clicked - closing menu");
-                closeMobileMenu();
-            });
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
-            // Close mobile menu when clicking on logout button
-            if (mobileLogoutBtn) {
-                mobileLogoutBtn.addEventListener('click', function() {
-                    console.log("📱 Mobile logout clicked - closing menu");
-                    closeMobileMenu();
-                });
-            }
+    showLoading(show) {
+        const loading = document.getElementById('loading');
+        if (loading) {
+            loading.classList.toggle('hidden', !show);
+        }
+    }
 
-            // Close mobile menu when pressing Escape key
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
-                    console.log("📱 Escape pressed - closing menu");
-                    closeMobileMenu();
+    showMessage(message, type) {
+        const container = document.getElementById('messageContainer');
+        if (!container) {
+            console.log('Message:', message);
+            return;
+        }
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${type}`;
+        messageEl.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle"></i>
+            ${message}
+        `;
+        
+        container.appendChild(messageEl);
+        
+
+        setTimeout(() => {
+            messageEl.style.opacity = '0';
+            messageEl.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (messageEl.parentNode) {
+                    messageEl.parentNode.removeChild(messageEl);
                 }
-            });
-
-            // Close mobile menu when window is resized to desktop
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768 && mobileMenu.classList.contains('active')) {
-                    console.log("📱 Window resized - closing menu");
-                    closeMobileMenu();
-                }
-            });
-        } else {
-            console.warn("⚠️ Mobile menu elements not found");
-        }
-
-        // Logout functionality
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', handleLogout);
-            console.log("✅ Desktop logout button setup");
-        } else {
-            console.warn("⚠️ Desktop logout button not found");
-        }
-        
-        if (mobileLogoutBtn) {
-            mobileLogoutBtn.addEventListener('click', handleLogout);
-            console.log("✅ Mobile logout button setup");
-        } else {
-            console.warn("⚠️ Mobile logout button not found");
-        }
-
-        function toggleMobileMenu() {
-            const isActive = mobileMenu.classList.contains('active');
-            
-            if (isActive) {
-                closeMobileMenu();
-            } else {
-                openMobileMenu();
-            }
-        }
-
-        function openMobileMenu() {
-            mobileMenuBtn.classList.add('active');
-            mobileMenu.classList.add('active');
-            overlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-            console.log("📱 Mobile menu opened");
-        }
-
-        function closeMobileMenu() {
-            mobileMenuBtn.classList.remove('active');
-            mobileMenu.classList.remove('active');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
-            console.log("📱 Mobile menu closed");
-        }
-        
-    } catch (error) {
-        console.error('❌ ERROR in setupNavbarInteractions:', error);
+            }, 300);
+        }, 5000);
     }
 }
 
-// Navbar scroll effect
-function setupNavbarScroll() {
-    const navbar = document.querySelector('.navbar');
-    
-    if (navbar) {
-        window.addEventListener('scroll', function() {
-            if (window.scrollY > 10) {
-                navbar.classList.add('scrolled');
-            } else {
-                navbar.classList.remove('scrolled');
-            }
-        });
-    }
-}
 
-// Update initializeDashboard function to include navbar
-function initializeDashboard(user) {
-    console.log("🎯 Initializing dashboard for:", user.email);
-    
-    try {
-        // Initialize navbar FIRST
-        initializeNavbar(user);
-        
-        // Setup navbar scroll effects
-        setupNavbarScroll();
-        
-        // Set user email in navbar
-        const userEmailEl = getElement('userEmail');
-        const mobileUserEmailEl = getElement('mobileUserEmail');
-        
-        if (userEmailEl) userEmailEl.textContent = user.email;
-        if (mobileUserEmailEl) mobileUserEmailEl.textContent = user.email;
-
-        // Set up event listeners
-        setupEventListeners();
-        console.log('Event listeners setup completed');
-
-        // Set default date to today
-        const expenseDateEl = getElement('expenseDate');
-        const monthFilterEl = getElement('monthFilter');
-        
-        if (expenseDateEl) {
-            expenseDateEl.value = new Date().toISOString().split('T')[0];
-        }
-        
-        if (monthFilterEl) {
-            monthFilterEl.value = new Date().toISOString().substring(0, 7);
-        }
-
-        // Load initial data
-        loadExpenses();
-        console.log('✅ Dashboard initialization completed');
-        
-    } catch (error) {
-        console.error('❌ ERROR in initializeDashboard:', error);
-    }
-}
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM loaded, initializing Expense Manager...');
+    window.expenseManager = new ExpenseManager();
+});

@@ -1,4 +1,4 @@
-// Firebase Configuration - ULTIMATE WORKING VERSION
+
 const firebaseConfig = {
     apiKey: "AIzaSyAr92CYaR0ymSXvoizlffGbA0fGZUkLl7k",
     authDomain: "expense-mananger-2a6c4.firebaseapp.com",
@@ -9,12 +9,58 @@ const firebaseConfig = {
     measurementId: "G-XB5MLJ95MW"
 };
 
-// Global variables
+
 let auth = null;
 let db = null;
 let firebaseInitialized = false;
 
-// Start initialization when page loads
+
+
+try {
+
+    if (typeof firebase === 'undefined') {
+        throw new Error('Firebase SDK not loaded!');
+    }
+
+
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    console.log('✅ Firebase initialized successfully');
+
+
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    
+    console.log('✅ Firebase services initialized');
+
+    window.auth = auth;
+    window.db = db;
+    
+} catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
+
+    window.auth = {
+        onAuthStateChanged: (callback) => {
+            console.warn('Firebase not available - using dummy auth');
+            callback(null);
+        },
+        signOut: () => Promise.resolve()
+    };
+    window.db = {
+        collection: () => ({
+            add: () => Promise.resolve({ id: 'dummy-id' }),
+            doc: () => ({
+                delete: () => Promise.resolve()
+            }),
+            where: () => ({
+                orderBy: () => ({
+                    get: () => Promise.resolve({ forEach: () => {} })
+                }),
+                get: () => Promise.resolve({ forEach: () => {} })
+            })
+        })
+    };
+}
+
 window.addEventListener('DOMContentLoaded', function() {
     console.log("🚀 Starting Firebase initialization...");
     initializeFirebaseWithRetry();
@@ -50,7 +96,7 @@ function initializeFirebase() {
     try {
         console.log("🔍 Checking Firebase availability...");
         
-        // Check if Firebase is loaded
+
         if (typeof firebase === 'undefined') {
             console.log("📥 Firebase not loaded, loading scripts...");
             loadFirebaseScripts();
@@ -59,17 +105,17 @@ function initializeFirebase() {
         
         console.log("✅ Firebase SDK found");
         
-        // Initialize Firebase App
+
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
             console.log("✅ Firebase App initialized");
         }
         
-        // Initialize Auth
+
         auth = firebase.auth();
         console.log("✅ Firebase Auth initialized");
         
-        // Initialize Firestore - MULTIPLE APPROACHES
+
         if (typeof firebase.firestore === 'function') {
             db = firebase.firestore();
             console.log("✅ Firestore initialized (function approach)");
@@ -83,11 +129,11 @@ function initializeFirebase() {
             return false;
         }
         
-        // Test Firestore connection
+
         if (db) {
             console.log("🔧 Firestore instance created:", typeof db);
             
-            // Set global variables
+
             window.auth = auth;
             window.db = db;
             window.firebaseApp = firebase.app();
@@ -108,7 +154,7 @@ function initializeFirebase() {
 function loadFirebaseScripts() {
     console.log("📥 Loading Firebase scripts dynamically...");
     
-    // List of scripts to load in order
+
     const scripts = [
         'https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js',
         'https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js', 
@@ -135,7 +181,7 @@ function loadScriptsSequentially(scripts, callback) {
     };
     script.onerror = function() {
         console.error(`❌ Failed to load: ${scripts[0]}`);
-        // Try next script even if one fails
+
         loadScriptsSequentially(scripts.slice(1), callback);
     };
     
@@ -162,7 +208,7 @@ function loadFirestoreScript() {
     
     script.onerror = function() {
         console.error("❌ Failed to load Firestore script");
-        // Try alternative CDN
+
         loadFirestoreAlternative();
     };
     
@@ -207,7 +253,7 @@ function setupAuthListener() {
         const currentPage = window.location.pathname;
         
         if (user) {
-            // User signed in
+
             if (currentPage.includes('index.html') || currentPage.includes('signup.html')) {
                 console.log("🔄 Redirecting to dashboard...");
                 setTimeout(() => {
@@ -215,7 +261,7 @@ function setupAuthListener() {
                 }, 1000);
             }
         } else {
-            // User signed out
+
             if (currentPage.includes('dashboard.html')) {
                 console.log("🔄 Redirecting to login...");
                 setTimeout(() => {
@@ -226,7 +272,6 @@ function setupAuthListener() {
     });
 }
 
-// Utility functions
 function showLoading(show) {
     const loadingEl = document.getElementById('loading');
     if (loadingEl) {
@@ -249,7 +294,7 @@ function showMessage(message, type = 'success') {
     }
 }
 
-// Export for other scripts
+
 window.firebaseConfig = {
     auth: auth,
     db: db,
